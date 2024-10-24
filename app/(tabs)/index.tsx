@@ -1,70 +1,190 @@
-import { Image, StyleSheet, Platform } from 'react-native';
-
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Modal,
+  TextInput,
+  Pressable,
+  TouchableOpacity,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { db } from '../../config/firebaseConfig'; // Import Firebase Firestore
+import { getDoc, doc } from 'firebase/firestore'; // Firestore methods
+import { StatusBar } from 'expo-status-bar';
 
 export default function HomeScreen() {
+  const [modalVisible, setModalVisible] = useState(false);
+  const [publicID, setPublicID] = useState('');
+  const [users, setUsers] = useState<{ displayName: string; publicKey: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  // Function to check if the user exists in Firestore
+  const checkUserExists = async () => {
+    setLoading(true);
+    try {
+      const userRef = doc(db, 'users', publicID);
+      const userSnapshot = await getDoc(userRef);
+
+      if (userSnapshot.exists()) {
+        const userData = userSnapshot.data();
+        const fetchedUser = {
+          displayName: userData.displayName,
+          publicKey: publicID,
+        };
+
+        // Add user to the flatlist
+        setUsers([...users, fetchedUser]);
+        setModalVisible(false);
+        setPublicID('');
+      } else {
+        alert('User not found');
+      }
+    } catch (error) {
+      console.error('Error fetching user:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle chat opening
+  const handleChatOpen = (user: { displayName: string; publicKey: string }) => {
+    router.push({
+      pathname: '/chat',
+      params: {
+        displayName: user.displayName,
+        publicKey: user.publicKey,
+      },
+    });
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({ ios: 'cmd + d', android: 'cmd + m' })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <View style={styles.container}>
+      <StatusBar style="light" backgroundColor="#121212" /> 
+
+      <FlatList
+        data={users}
+        keyExtractor={(item) => item.publicKey}
+        renderItem={({ item }) => (
+          <TouchableOpacity onPress={() => handleChatOpen(item)} style={styles.card}>
+            <Text style={styles.cardText}>{item.displayName}</Text>
+          </TouchableOpacity>
+        )}
+      />
+
+      {/* Floating Button */}
+      <TouchableOpacity
+        style={styles.floatingButton}
+        onPress={() => setModalVisible(true)}
+      >
+        <Text style={styles.floatingButtonText}>+</Text>
+      </TouchableOpacity>
+
+      {/* Modal */}
+      <Modal visible={modalVisible} transparent={true} animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Enter Public ID</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter public ID"
+              placeholderTextColor="#888"
+              value={publicID}
+              onChangeText={setPublicID}
+            />
+            <Pressable style={styles.button} onPress={checkUserExists}>
+              <Text style={styles.buttonText}>{loading ? 'Loading...' : 'Next'}</Text>
+            </Pressable>
+            <Pressable style={styles.cancelButton} onPress={() => setModalVisible(false)}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
+// Styles for Home Screen
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: '#121212',
+    padding: 20,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  card: {
+    backgroundColor: '#1E1E1E',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    elevation: 4,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
+  cardText: {
+    fontSize: 18,
+    color: '#FFF',
+  },
+  floatingButton: {
     position: 'absolute',
+    bottom: 30,
+    right: 30,
+    backgroundColor: '#00A86B',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 10,
+  },
+  floatingButtonText: {
+    color: '#FFF',
+    fontSize: 30,
+    fontWeight: 'bold',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  },
+  modalContent: {
+    backgroundColor: '#222',
+    padding: 20,
+    borderRadius: 10,
+    width: '80%',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    color: '#FFF',
+    fontSize: 18,
+    marginBottom: 10,
+  },
+  input: {
+    backgroundColor: '#333',
+    color: '#FFF',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 5,
+    marginBottom: 20,
+    width: '100%',
+  },
+  button: {
+    backgroundColor: '#00A86B',
+    paddingVertical: 15,
+    paddingHorizontal: 60,
+    borderRadius: 30,
+    marginBottom: 10,
+  },
+  buttonText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+  },
+  cancelButton: {
+    marginTop: 10,
+  },
+  cancelButtonText: {
+    color: '#FF6B6B',
+    fontWeight: 'bold',
   },
 });
